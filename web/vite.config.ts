@@ -7,6 +7,6 @@ export default defineConfig({
   resolve: { tsconfigPaths: true }, // resolves the "~/" import alias from tsconfig.json
   server: {
     // Forward /api to the Node API, so the browser sees one origin and we need no CORS setup.
-    proxy: { "/api": "http://localhost:3001" },
+    proxy: { "/api": "http://127.0.0.1:3001" },
   },
 });
