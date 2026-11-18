@@ -16,13 +16,12 @@ npm run setup   # starts Postgres, runs migrations, seeds 10,000 materials
 npm run dev     # API on :3001, web app on http://localhost:5173
 ```
 
-**Optional, natural-language filters:** get a free key at https://openrouter.ai/keys, then:
+**Optional, natural-language filters.** Run `cp server/.env.example server/.env`, then choose one:
 
-```bash
-cp server/.env.example server/.env   # then paste your key into OPENROUTER_API_KEY
-```
+- **OpenRouter (free models):** get a free key at https://openrouter.ai/keys and set `LLM_API_KEY` in `server/.env`. Free models are shared, so they're sometimes rate-limited.
+- **Local model with [Ollama](https://ollama.com) (no key, no rate limits):** run `ollama pull gemma3:12b`, then set `LLM_API_URL=http://localhost:11434/v1` and `LLM_MODEL=gemma3:12b` in `server/.env`. This needs about 8 GB of RAM.
 
-Restart `npm run dev`. Without a key, the rest of the app works normally and the natural-language box explains that it isn't set up.
+Restart `npm run dev`. Without either, the rest of the app works normally and the natural-language box explains that it isn't set up.
 
 Other commands:
 
@@ -45,7 +44,7 @@ server/
   drizzle/                  Generated SQL migrations
   src/materials.ts          Input validation (Zod) and the query (search, filters, sort, pagination)
   src/app.ts                Express routes and error handling
-  src/nl-filters.ts         Natural-language filters: prompt, OpenRouter call, validation of the reply
+  src/nl-filters.ts         Natural-language filters: prompt, LLM call, validation of the reply
   src/*.test.ts             API tests
 web/
   app/routes/materials.tsx  The page: clientLoader (fetching), error state
@@ -132,20 +131,27 @@ There's no client cache. Going back re-fetches, which is cheap here. TanStack Qu
 **Seed data.** It uses faker with a fixed seed, so every run produces the same data and the tests are repeatable. Records come from templates that read like real catalogue entries, such as "Bearing, deep groove ball, 25mm bore" (SKF, MPN `6205-2RS`), rather than lorem ipsum. Rows are inserted in batches of 1,000 to stay under Postgres' limit of 65,535 parameters per query.
 
 **Optional extra: natural-language filters.** Type "obsolete bearings in Brisbane" and press Enter. The flow:
-1. The API sends the text to an LLM through OpenRouter (free model, `temperature: 0`). The system prompt lists the allowed values, including the real plant codes and names from the database, so "Brisbane" maps to `1000`.
+1. The API sends the text to an LLM with `temperature: 0`. It works with any OpenAI-compatible chat API: OpenRouter's free models by default, or a local model through Ollama. The system prompt lists the allowed values, including the real plant codes and names from the database, so "Brisbane" maps to `1000`.
 2. **The reply is treated as untrusted input.** We extract the JSON, then Zod validates each field. A made-up value such as `"status": "Broken"` is dropped instead of failing the whole answer.
 3. The front end writes the filters to the **URL**, the same as the normal controls. So the request goes through the normal `/api/materials` validation again, and the search box and dropdowns show exactly what the LLM chose. The user can check it, adjust it, and share or refresh the link.
 
 Design choices:
 - It only runs when you submit, not on every keystroke, because each submit is an LLM call.
-- It has a 15-second timeout.
+- It has a 30-second timeout, which allows for a local model loading into memory on first use.
 - If the key is missing or the LLM fails, it shows a clear message, and the rest of the app is unaffected.
-- Free models come and go and are often rate-limited. So `OPENROUTER_MODEL` takes a list, and OpenRouter falls back to the next model automatically. If all of them are busy, the user is told to retry in a few seconds.
+- Free models come and go and are often rate-limited. So `LLM_MODEL` takes a list, and OpenRouter falls back to the next model automatically. If all of them are busy, the user is told to retry in a few seconds.
+- The endpoint is configurable (`LLM_API_URL`), so the same code can run a local model through Ollama. That has no rate limits and no network dependency, and the data never leaves the machine, which matters for real customer catalogues.
 - Trade-off: the LLM can only choose values that already exist as filters. Manufacturer isn't a filter, so "SKF bearings" can't narrow by manufacturer.
 
-**Tests.** 22 tests across two files:
+**Tests.** 23 tests across two files:
 - `server/src/app.test.ts` runs the real Express app (through supertest) against the seeded database. It covers search, filters, sorting, pagination and validation. I used the real database rather than mocks because the main risk is the SQL itself.
-- `server/src/nl-filters.test.ts` mocks only the OpenRouter call, and tests our side: parsing a reply wrapped in prose, dropping invented values, sending the plant list, and the 503, 400 and 502 errors.
+- `server/src/nl-filters.test.ts` mocks only the LLM API call, and tests our side:
+  - parsing a reply wrapped in prose
+  - dropping invented values
+  - sending the plant list
+  - the fallback model list
+  - local-model configuration (custom URL, no key)
+  - the 503, 400, 429 and 502 errors
 
 ## What I'd do next
 
@@ -168,8 +174,8 @@ I built this with **Claude Code**.
   - Two versions of Vite were installed (one pulled in by Vitest, one by the web app), which broke the plugin types. I aligned both on one version and used Vite's built-in tsconfig path handling instead of an extra plugin.
   - The first version of the search sync trimmed the input text while the user was still typing: typing "ball " lost the trailing space. The fix only overwrites the input when the URL value differs from the trimmed text.
   - Intermittent 502s on macOS. My first guess (from the AI) was a keep-alive race in the Vite proxy, and that change didn't help. The dev logs showed the real cause: `tsx watch` also watches files inside `node_modules`, and something on the Mac (probably iCloud Desktop sync or Spotlight) kept touching them. That restarted the API every few seconds, and requests that arrived mid-restart failed. The fix was to exclude `../node_modules/**` from the watcher and revert the proxy change. The lesson: read the logs before changing code.
-  - Free-model reality: the first default (Llama 3.3 70B free) had been withdrawn (404), and the next (Gemma 4 31B) was rate-limited by the shared free pool (429). We used OpenRouter's `models` fallback list rather than writing our own retry logic, and added a specific "busy, try again" message.
-  - Natural-language filters: the sandbox couldn't reach OpenRouter. So the agent tested everything around the LLM call with a mocked reply (prompt contents, parsing, validation, errors, and the UI with a mocked API response). I then checked the real model end to end with my own key.
+  - Free-model reality: the first default (Llama 3.3 70B free) had been withdrawn (404), and the next (Gemma 4 31B) was rate-limited by the shared free pool (429). We used OpenRouter's `models` fallback list rather than writing our own retry logic, and added a specific "busy, try again" message. To get rid of the dependency on a shared free pool, the API URL became configurable, so the same code runs a local model through Ollama.
+  - Natural-language filters: the sandbox couldn't reach OpenRouter or Ollama. So the agent tested everything around the LLM call with a mocked reply (prompt contents, parsing, validation, errors, and the UI with a mocked API response). I then checked the real model end to end with my own key.
   - The shadcn registry wasn't reachable from the sandbox, so the component source was copied from the shadcn/ui repo. `components.json` is set up, so `npx shadcn add <component>` works normally.
   - Checked that the indexes are justified, with `EXPLAIN ANALYZE`, and kept the README honest about which ones matter at this data size.
 - **Agent context:** [`CLAUDE.md`](./CLAUDE.md) describes the structure, commands and conventions for agents working in this repo.

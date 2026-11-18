@@ -1,5 +1,8 @@
 // Natural-language filters: turn "obsolete bearings in Brisbane" into
-// { q: "bearing", status: "Obsolete", plant: "1000" } using an LLM via OpenRouter.
+// { q: "bearing", status: "Obsolete", plant: "1000" } using an LLM.
+//
+// Works with any OpenAI-compatible chat API: OpenRouter (default, free models) or a
+// local model through Ollama (LLM_API_URL=http://localhost:11434/v1, no key needed).
 //
 // The LLM's reply is treated as untrusted input: we validate it with Zod and drop
 // anything that isn't an allowed value. The front end then puts the result in the
@@ -8,8 +11,8 @@ import { z } from "zod";
 import { MATERIAL_STATUSES, MATERIAL_TYPES } from "./db/schema";
 import { listPlants } from "./materials";
 
-const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-// Tried in order: if one is rate-limited or down, OpenRouter falls back to the next.
+const DEFAULT_API_URL = "https://openrouter.ai/api/v1";
+// OpenRouter tries these in order: if one is rate-limited or down, it falls back to the next.
 // Free models are shared and often busy, so a fallback list keeps the feature usable.
 const DEFAULT_MODELS = "google/gemma-4-31b-it:free,google/gemma-4-26b-a4b-it:free,nvidia/nemotron-3-ultra-550b-a55b:free";
 
@@ -35,8 +38,9 @@ const llmFilters = z.object({
 
 export type NlFilters = z.infer<typeof llmFilters>;
 
+// Configured if there's an OpenRouter key, or a custom URL (e.g. a local Ollama, which needs no key).
 export function isNlFiltersConfigured() {
-  return Boolean(process.env.OPENROUTER_API_KEY);
+  return Boolean(process.env.LLM_API_KEY || process.env.LLM_API_URL);
 }
 
 async function buildSystemPrompt() {
@@ -53,16 +57,19 @@ Example: "obsolete bearings in Brisbane" -> {"q":"bearing","status":"Obsolete","
 }
 
 export async function textToFilters(text: string): Promise<NlFilters> {
-  const models = (process.env.OPENROUTER_MODEL || DEFAULT_MODELS).split(",").map((m) => m.trim());
-  const response = await fetch(OPENROUTER_URL, {
+  const apiUrl = process.env.LLM_API_URL || DEFAULT_API_URL;
+  const models = (process.env.LLM_MODEL || DEFAULT_MODELS).split(",").map((m) => m.trim());
+  const apiKey = process.env.LLM_API_KEY;
+
+  const response = await fetch(`${apiUrl}/chat/completions`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
       "Content-Type": "application/json",
+      ...(apiKey && { Authorization: `Bearer ${apiKey}` }),
     },
     body: JSON.stringify({
       model: models[0],
-      models, // OpenRouter's fallback list
+      models, // OpenRouter's fallback list (other APIs ignore it)
 
       temperature: 0, // we want the same answer for the same question
       messages: [
@@ -70,11 +77,12 @@ export async function textToFilters(text: string): Promise<NlFilters> {
         { role: "user", content: text },
       ],
     }),
-    signal: AbortSignal.timeout(15_000), // don't leave the user waiting forever
+    // Don't leave the user waiting forever. 30s allows for a local model loading on first use.
+    signal: AbortSignal.timeout(30_000),
   });
 
   if (!response.ok) {
-    throw new LlmError(`OpenRouter returned ${response.status}: ${await response.text()}`, response.status);
+    throw new LlmError(`LLM API returned ${response.status}: ${await response.text()}`, response.status);
   }
 
   const body = await response.json();

@@ -23,7 +23,7 @@ app.get("/api/materials", async (req, res) => {
 
 app.post("/api/nl-filters", express.json(), async (req, res) => {
   if (!isNlFiltersConfigured()) {
-    res.status(503).json({ error: "Natural-language search isn't set up. Add OPENROUTER_API_KEY to server/.env" });
+    res.status(503).json({ error: "Natural-language search isn't set up. See server/.env.example" });
     return;
   }
   const parsed = nlFiltersRequest.safeParse(req.body);

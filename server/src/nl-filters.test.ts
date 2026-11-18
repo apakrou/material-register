@@ -1,4 +1,4 @@
-// Tests for natural-language filters. The OpenRouter call is mocked: we test our side
+// Tests for natural-language filters. The LLM API call is mocked: we test our side
 // (prompting, parsing, validation, error handling), not the model.
 import request from "supertest";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,7 +7,7 @@ import { db } from "./db";
 
 afterAll(() => db.$client.end());
 
-// Pretend OpenRouter replied with this message content.
+// Pretend the LLM API replied with this message content.
 function mockLlmReply(content: string, status = 200) {
   return vi.spyOn(globalThis, "fetch").mockResolvedValue(
     new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status }),
@@ -17,14 +17,18 @@ function mockLlmReply(content: string, status = 200) {
 const ask = (text: unknown) => request(app).post("/api/nl-filters").send({ text });
 
 describe("POST /api/nl-filters", () => {
-  beforeEach(() => vi.stubEnv("OPENROUTER_API_KEY", "test-key"));
+  beforeEach(() => {
+    vi.stubEnv("LLM_API_KEY", "test-key");
+    vi.stubEnv("LLM_API_URL", "");
+    vi.stubEnv("LLM_MODEL", "");
+  });
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
   });
 
-  it("returns 503 when no API key is configured", async () => {
-    vi.stubEnv("OPENROUTER_API_KEY", "");
+  it("returns 503 when no API key or URL is configured", async () => {
+    vi.stubEnv("LLM_API_KEY", "");
     const res = await ask("obsolete bearings in Brisbane");
     expect(res.status).toBe(503);
   });
@@ -55,12 +59,25 @@ describe("POST /api/nl-filters", () => {
     expect(body.messages[1]).toEqual({ role: "user", content: "anything in Perth" });
   });
 
-  it("sends a fallback list of models, configurable through OPENROUTER_MODEL", async () => {
-    vi.stubEnv("OPENROUTER_MODEL", "model-a:free, model-b:free");
+  it("sends a fallback list of models, configurable through LLM_MODEL", async () => {
+    vi.stubEnv("LLM_MODEL", "model-a:free, model-b:free");
     const fetchSpy = mockLlmReply("{}");
     await ask("bearings");
     const body = JSON.parse(fetchSpy.mock.calls[0][1]!.body as string);
     expect(body.models).toEqual(["model-a:free", "model-b:free"]);
+  });
+
+  it("works with a local model (e.g. Ollama): custom URL, no API key", async () => {
+    vi.stubEnv("LLM_API_KEY", "");
+    vi.stubEnv("LLM_API_URL", "http://localhost:11434/v1");
+    vi.stubEnv("LLM_MODEL", "gemma3:12b");
+    const fetchSpy = mockLlmReply('{"status":"Active"}');
+    const res = await ask("active stuff");
+    expect(res.body).toEqual({ status: "Active" });
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(url).toBe("http://localhost:11434/v1/chat/completions");
+    expect(init!.headers).not.toHaveProperty("Authorization");
+    expect(JSON.parse(init!.body as string).model).toBe("gemma3:12b");
   });
 
   it("tells the user to retry when the free models are rate-limited", async () => {

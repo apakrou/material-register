@@ -21,7 +21,7 @@ npm workspaces: `server/` (Express 5 + Drizzle + Postgres) and `web/` (React Rou
 - Never put user input into SQL directly. Sortable columns come from the `SORTABLE_COLUMNS` map.
 
 ## Natural-language filters
-`server/src/nl-filters.ts` asks an LLM (OpenRouter, key in `server/.env`) to turn text into `{ q, type, status, plant }`. The reply is untrusted: Zod drops invalid fields. The UI writes the result to the URL. Tests mock `fetch`; never call the real API in tests.
+`server/src/nl-filters.ts` asks an LLM through any OpenAI-compatible API (OpenRouter by default, or local Ollama; settings in `server/.env`, see `.env.example`) to turn text into `{ q, type, status, plant }`. The reply is untrusted: Zod drops invalid fields. The UI writes the result to the URL. Tests mock `fetch`; never call the real API in tests.
 If you add a filter, also add it to the prompt and to the `llmFilters` schema there.
 
 ## How to add a filter (e.g. manufacturer)
