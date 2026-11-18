@@ -169,7 +169,7 @@ Design choices:
 I built this with **Claude Code** as my coding agent, and treated it like a fast pair programmer. It wrote most of the code. I set the direction, reviewed the output, tested it on my own machine, and pushed back when something was wrong or more complicated than it needed to be.
 
 **How I worked with it**
-- I started by asking it to read the brief closely and build the simplest design that met every requirement, because I need to be able to explain every line. That ruled out extras like a state library, a separate types package or tRPC for two endpoints.
+- I started by asking it to read the brief closely and build the simplest design that met every requirement. I treated code complexity as a cost to keep down: a minimal, working product first, with nothing added without a clear reason. That ruled out extras like a state library, a separate types package or tRPC for two endpoints.
 - I chose shadcn/ui as the UI library, kept the database, API and front end in one repo with npm workspaces, and wanted setup to be three commands.
 - Larger changes, like the natural-language filters, went on a separate branch. I only merged them into `main` after testing them on my Mac.
 - [`CLAUDE.md`](./CLAUDE.md) gives any agent the project's structure, commands and conventions. It also has step-by-step checklists for adding a filter or a column, which keeps the agent's changes consistent with the rest of the code.
@@ -185,7 +185,11 @@ I built this with **Claude Code** as my coding agent, and treated it like a fast
 **What I had to correct or steer**
 - **Intermittent 502 errors on my Mac.** The agent's first guess was a keep-alive problem in the Vite proxy. The change it made didn't fix anything. I pasted the dev server logs, which showed the real cause: `tsx watch` was also watching files in `node_modules`. iCloud sync on my Desktop folder kept touching those files, so the API restarted every few seconds, and requests that landed mid-restart failed. We excluded `node_modules` from the watcher and reverted the proxy change, and I moved the project out of the iCloud-synced Desktop. The lesson: read the logs before changing code.
 - **The optional extra.** The agent first chose tests as the one optional extra. I switched it to natural-language filters, because they fit an AI-native role and make a better demo. The tests stayed, as normal quality practice.
-- **Free models in practice.** On my machine, the first default model (Llama 3.3 70B) was no longer free (404), and the next (Gemma 4 31B) was rate-limited by OpenRouter's shared free pool (429). We added OpenRouter's model fallback list and a clear "busy, try again" message. Shared free models still aren't something I'd trust in a live demo, so I asked whether I could run a model locally. Making the API URL configurable means the same code now runs `gemma3:12b` on Ollama on my laptop: no key, no rate limits, and the data never leaves the machine.
+- **Free models in practice.** I first tried OpenRouter's free models, and they weren't reliable:
+  - The first default model (Llama 3.3 70B) had been withdrawn from the free tier (HTTP 404).
+  - The next one (Gemma 4 31B) was rate-limited (HTTP 429). Free models share one pool of capacity across all users, so requests are refused when it's busy.
+  
+  We added OpenRouter's model fallback list and a clear "busy, try again" message. But a shared free pool isn't something I'd rely on in a live demo, so I decided to run a smaller model on my own laptop instead. Ollama speaks the same API, so making the API URL configurable was enough: the app now runs `gemma3:12b` locally. That means no API key, no rate limits, and the catalogue data never leaves the machine. OpenRouter remains the default for anyone without a local model.
 - **Verifying what the sandbox couldn't.** The agent's cloud sandbox couldn't reach OpenRouter or Ollama. So it tested everything around the LLM call against mocked replies: the prompt contents, parsing, validation, errors, and the UI with a mocked response. I tested the real model end to end on my Mac with Ollama. The first request after starting Ollama timed out while the model loaded into memory. Retrying worked, so I warm the model up before demos.
 - **Smaller things.**
   - I set up Docker Desktop for the database.
