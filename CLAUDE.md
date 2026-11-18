@@ -20,12 +20,17 @@ npm workspaces: `server/` (Express 5 + Drizzle + Postgres) and `web/` (React Rou
 - The server validates every input with Zod (`server/src/materials.ts`) and applies the defaults. The response echoes the validated `query`, and the UI reads state from it.
 - Never put user input into SQL directly. Sortable columns come from the `SORTABLE_COLUMNS` map.
 
+## Natural-language filters
+`server/src/nl-filters.ts` asks an LLM (OpenRouter, key in `server/.env`) to turn text into `{ q, type, status, plant }`. The reply is untrusted: Zod drops invalid fields. The UI writes the result to the URL. Tests mock `fetch`; never call the real API in tests.
+If you add a filter, also add it to the prompt and to the `llmFilters` schema there.
+
 ## How to add a filter (e.g. manufacturer)
 1. `server/src/materials.ts`: add the param to `listMaterialsQuery` and push an `eq(...)` condition in `listMaterials`.
 2. `web/app/lib/api.ts`: add the field to `MaterialsResponse["query"]`.
 3. `web/app/components/materials-toolbar.tsx`: add a `<FilterSelect>`; include it in `hasFilters`.
 4. `web/app/routes/materials.tsx`: add the param to `clearFilters`.
-5. Add a test in `server/src/app.test.ts`. Run `npm run typecheck && npm test`.
+5. Add it to the prompt and the `llmFilters` schema in `server/src/nl-filters.ts`, and to `nl-search.tsx`.
+6. Add a test in `server/src/app.test.ts`. Run `npm run typecheck && npm test`.
 
 ## How to add a column
 - If it's a new database field: add it in `schema.ts`, generate and run a migration, and update `seed.ts`.

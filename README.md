@@ -8,13 +8,21 @@ A small full-stack app for searching, filtering, sorting and paging through a ca
 
 ## Getting started
 
-Requirements: Node 20.19 or later (22 recommended) and Docker **Docker Desktop must be running** before `npm run setup`. If you see "failed to connect to the docker API", start it first, for example with `open -a Docker` on macOS.
+Requirements: Node 22 or later and Docker. **Docker Desktop must be running** before `npm run setup`. If you see "failed to connect to the docker API", start it first, for example with `open -a Docker` on macOS.
 
 ```bash
 npm install
 npm run setup   # starts Postgres, runs migrations, seeds 10,000 materials
 npm run dev     # API on :3001, web app on http://localhost:5173
 ```
+
+**Optional, natural-language filters:** get a free key at https://openrouter.ai/keys, then:
+
+```bash
+cp server/.env.example server/.env   # then paste your key into OPENROUTER_API_KEY
+```
+
+Restart `npm run dev`. Without a key, the rest of the app works normally and the natural-language box explains that it isn't set up.
 
 Other commands:
 
@@ -37,7 +45,8 @@ server/
   drizzle/                  Generated SQL migrations
   src/materials.ts          Input validation (Zod) and the query (search, filters, sort, pagination)
   src/app.ts                Express routes and error handling
-  src/app.test.ts           API tests
+  src/nl-filters.ts         Natural-language filters: prompt, OpenRouter call, validation of the reply
+  src/*.test.ts             API tests
 web/
   app/routes/materials.tsx  The page: clientLoader (fetching), error state
   app/components/           Toolbar (search and filters), table, pagination
@@ -73,6 +82,8 @@ A request goes from the URL to the database and back like this:
 Response: `{ data: Material[], total, pageCount, query }`.
 
 `GET /api/plants`: all plants, used to fill the plant filter.
+
+`POST /api/nl-filters` with body `{ "text": "obsolete bearings in Brisbane" }` returns filters such as `{ "q": "bearing", "status": "Obsolete", "plant": "1000" }`. It returns `503` if no API key is set, and `502` if the LLM fails or replies with something unusable.
 
 ## Decisions and trade-offs
 
@@ -120,7 +131,21 @@ There's no client cache. Going back re-fetches, which is cheap here. TanStack Qu
 
 **Seed data.** It uses faker with a fixed seed, so every run produces the same data and the tests are repeatable. Records come from templates that read like real catalogue entries, such as "Bearing, deep groove ball, 25mm bore" (SKF, MPN `6205-2RS`), rather than lorem ipsum. Rows are inserted in batches of 1,000 to stay under Postgres' limit of 65,535 parameters per query.
 
-**Optional extra: tests.** `server/src/app.test.ts` has 13 integration tests. They run the real Express app (through supertest) against the seeded database, covering search, filters, sorting, pagination and validation. I chose real-database tests over mocks because the main risk is the SQL itself.
+**Optional extra: natural-language filters.** Type "obsolete bearings in Brisbane" and press Enter. The flow:
+1. The API sends the text to an LLM through OpenRouter (free model, `temperature: 0`). The system prompt lists the allowed values, including the real plant codes and names from the database, so "Brisbane" maps to `1000`.
+2. **The reply is treated as untrusted input.** We extract the JSON, then Zod validates each field. A made-up value such as `"status": "Broken"` is dropped instead of failing the whole answer.
+3. The front end writes the filters to the **URL**, the same as the normal controls. So the request goes through the normal `/api/materials` validation again, and the search box and dropdowns show exactly what the LLM chose. The user can check it, adjust it, and share or refresh the link.
+
+Design choices:
+- It only runs when you submit, not on every keystroke, because each submit is an LLM call.
+- It has a 15-second timeout.
+- If the key is missing or the LLM fails, it shows a clear message, and the rest of the app is unaffected.
+- The model is configurable through `OPENROUTER_MODEL`, because free models come and go.
+- Trade-off: the LLM can only choose values that already exist as filters. Manufacturer isn't a filter, so "SKF bearings" can't narrow by manufacturer.
+
+**Tests.** 20 tests across two files:
+- `server/src/app.test.ts` runs the real Express app (through supertest) against the seeded database. It covers search, filters, sorting, pagination and validation. I used the real database rather than mocks because the main risk is the SQL itself.
+- `server/src/nl-filters.test.ts` mocks only the OpenRouter call, and tests our side: parsing a reply wrapped in prose, dropping invented values, sending the plant list, and the 503, 400 and 502 errors.
 
 ## What I'd do next
 
@@ -129,6 +154,7 @@ There's no client cache. Going back re-fetches, which is cheap here. TanStack Qu
 - **End-to-end types** with tRPC or a shared package, to remove the duplicated response types.
 - **Multi-select filters** (several plants at once), a manufacturer filter, and a page-size selector.
 - **Detail and edit view** for a single material.
+- **Natural-language filters:** use structured outputs (a JSON schema in the request) on models that support it, add a manufacturer filter so "SKF bearings" works, and cache answers for repeated questions.
 - **Front-end tests** for the URL-state logic and the debounce, plus an end-to-end Playwright test.
 - **Production setup:** serve the built SPA and the API from one origin (or configure CORS), add structured logging and a health-check endpoint, and use a separate test database.
 
@@ -142,6 +168,7 @@ I built this with **Claude Code**.
   - Two versions of Vite were installed (one pulled in by Vitest, one by the web app), which broke the plugin types. I aligned both on one version and used Vite's built-in tsconfig path handling instead of an extra plugin.
   - The first version of the search sync trimmed the input text while the user was still typing: typing "ball " lost the trailing space. The fix only overwrites the input when the URL value differs from the trimmed text.
   - Intermittent 502s on macOS. My first guess (from the AI) was a keep-alive race in the Vite proxy, and that change didn't help. The dev logs showed the real cause: `tsx watch` also watches files inside `node_modules`, and something on the Mac (probably iCloud Desktop sync or Spotlight) kept touching them. That restarted the API every few seconds, and requests that arrived mid-restart failed. The fix was to exclude `../node_modules/**` from the watcher and revert the proxy change. The lesson: read the logs before changing code.
+  - Natural-language filters: the sandbox couldn't reach OpenRouter. So the agent tested everything around the LLM call with a mocked reply (prompt contents, parsing, validation, errors, and the UI with a mocked API response). I then checked the real model end to end with my own key.
   - The shadcn registry wasn't reachable from the sandbox, so the component source was copied from the shadcn/ui repo. `components.json` is set up, so `npx shadcn add <component>` works normally.
   - Checked that the indexes are justified, with `EXPLAIN ANALYZE`, and kept the README honest about which ones matter at this data size.
 - **Agent context:** [`CLAUDE.md`](./CLAUDE.md) describes the structure, commands and conventions for agents working in this repo.
