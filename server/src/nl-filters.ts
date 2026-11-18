@@ -9,7 +9,16 @@ import { MATERIAL_STATUSES, MATERIAL_TYPES } from "./db/schema";
 import { listPlants } from "./materials";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const DEFAULT_MODEL = "google/gemma-4-31b-it:free";
+// Tried in order: if one is rate-limited or down, OpenRouter falls back to the next.
+// Free models are shared and often busy, so a fallback list keeps the feature usable.
+const DEFAULT_MODELS = "google/gemma-4-31b-it:free,google/gemma-4-26b-a4b-it:free,nvidia/nemotron-3-ultra-550b-a55b:free";
+
+// Lets the route tell "rate-limited" apart from other failures.
+export class LlmError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
+}
 
 export const nlFiltersRequest = z.object({
   text: z.string().trim().min(1, "Type what you're looking for").max(200),
@@ -44,6 +53,7 @@ Example: "obsolete bearings in Brisbane" -> {"q":"bearing","status":"Obsolete","
 }
 
 export async function textToFilters(text: string): Promise<NlFilters> {
+  const models = (process.env.OPENROUTER_MODEL || DEFAULT_MODELS).split(",").map((m) => m.trim());
   const response = await fetch(OPENROUTER_URL, {
     method: "POST",
     headers: {
@@ -51,7 +61,9 @@ export async function textToFilters(text: string): Promise<NlFilters> {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: process.env.OPENROUTER_MODEL ?? DEFAULT_MODEL,
+      model: models[0],
+      models, // OpenRouter's fallback list
+
       temperature: 0, // we want the same answer for the same question
       messages: [
         { role: "system", content: await buildSystemPrompt() },
@@ -62,7 +74,7 @@ export async function textToFilters(text: string): Promise<NlFilters> {
   });
 
   if (!response.ok) {
-    throw new Error(`OpenRouter returned ${response.status}: ${await response.text()}`);
+    throw new LlmError(`OpenRouter returned ${response.status}: ${await response.text()}`, response.status);
   }
 
   const body = await response.json();

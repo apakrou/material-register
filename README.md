@@ -140,10 +140,10 @@ Design choices:
 - It only runs when you submit, not on every keystroke, because each submit is an LLM call.
 - It has a 15-second timeout.
 - If the key is missing or the LLM fails, it shows a clear message, and the rest of the app is unaffected.
-- The model is configurable through `OPENROUTER_MODEL`, because free models come and go.
+- Free models come and go and are often rate-limited. So `OPENROUTER_MODEL` takes a list, and OpenRouter falls back to the next model automatically. If all of them are busy, the user is told to retry in a few seconds.
 - Trade-off: the LLM can only choose values that already exist as filters. Manufacturer isn't a filter, so "SKF bearings" can't narrow by manufacturer.
 
-**Tests.** 20 tests across two files:
+**Tests.** 22 tests across two files:
 - `server/src/app.test.ts` runs the real Express app (through supertest) against the seeded database. It covers search, filters, sorting, pagination and validation. I used the real database rather than mocks because the main risk is the SQL itself.
 - `server/src/nl-filters.test.ts` mocks only the OpenRouter call, and tests our side: parsing a reply wrapped in prose, dropping invented values, sending the plant list, and the 503, 400 and 502 errors.
 
@@ -168,6 +168,7 @@ I built this with **Claude Code**.
   - Two versions of Vite were installed (one pulled in by Vitest, one by the web app), which broke the plugin types. I aligned both on one version and used Vite's built-in tsconfig path handling instead of an extra plugin.
   - The first version of the search sync trimmed the input text while the user was still typing: typing "ball " lost the trailing space. The fix only overwrites the input when the URL value differs from the trimmed text.
   - Intermittent 502s on macOS. My first guess (from the AI) was a keep-alive race in the Vite proxy, and that change didn't help. The dev logs showed the real cause: `tsx watch` also watches files inside `node_modules`, and something on the Mac (probably iCloud Desktop sync or Spotlight) kept touching them. That restarted the API every few seconds, and requests that arrived mid-restart failed. The fix was to exclude `../node_modules/**` from the watcher and revert the proxy change. The lesson: read the logs before changing code.
+  - Free-model reality: the first default (Llama 3.3 70B free) had been withdrawn (404), and the next (Gemma 4 31B) was rate-limited by the shared free pool (429). We used OpenRouter's `models` fallback list rather than writing our own retry logic, and added a specific "busy, try again" message.
   - Natural-language filters: the sandbox couldn't reach OpenRouter. So the agent tested everything around the LLM call with a mocked reply (prompt contents, parsing, validation, errors, and the UI with a mocked API response). I then checked the real model end to end with my own key.
   - The shadcn registry wasn't reachable from the sandbox, so the component source was copied from the shadcn/ui repo. `components.json` is set up, so `npx shadcn add <component>` works normally.
   - Checked that the indexes are justified, with `EXPLAIN ANALYZE`, and kept the README honest about which ones matter at this data size.

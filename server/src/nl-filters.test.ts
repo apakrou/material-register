@@ -55,9 +55,25 @@ describe("POST /api/nl-filters", () => {
     expect(body.messages[1]).toEqual({ role: "user", content: "anything in Perth" });
   });
 
-  it("returns 502 with a friendly message when the LLM fails", async () => {
+  it("sends a fallback list of models, configurable through OPENROUTER_MODEL", async () => {
+    vi.stubEnv("OPENROUTER_MODEL", "model-a:free, model-b:free");
+    const fetchSpy = mockLlmReply("{}");
+    await ask("bearings");
+    const body = JSON.parse(fetchSpy.mock.calls[0][1]!.body as string);
+    expect(body.models).toEqual(["model-a:free", "model-b:free"]);
+  });
+
+  it("tells the user to retry when the free models are rate-limited", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {}); // keep test output clean
     mockLlmReply("rate limited", 429);
+    const res = await ask("obsolete bearings");
+    expect(res.status).toBe(429);
+    expect(res.body.error).toMatch(/busy/);
+  });
+
+  it("returns 502 with a friendly message when the LLM fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    mockLlmReply("server error", 500);
     const res = await ask("obsolete bearings");
     expect(res.status).toBe(502);
     expect(res.body.error).toMatch(/Couldn't interpret/);
