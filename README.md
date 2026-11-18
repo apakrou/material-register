@@ -8,7 +8,7 @@ A small full-stack app for searching, filtering, sorting and paging through a ca
 
 ## Getting started
 
-Requirements: Node 20.19 or later (22 recommended) and Docker.
+Requirements: Node 20.19 or later (22 recommended) and Docker **Docker Desktop must be running** before `npm run setup`. If you see "failed to connect to the docker API", start it first, for example with `open -a Docker` on macOS.
 
 ```bash
 npm install
