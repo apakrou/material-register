@@ -2,6 +2,7 @@ import { AlertCircle } from "lucide-react";
 import { Link, useNavigation } from "react-router";
 import { MaterialsTable } from "~/components/materials-table";
 import { MaterialsToolbar } from "~/components/materials-toolbar";
+import { NaturalLanguageSearch } from "~/components/nl-search";
 import { PageShell } from "~/components/page-shell";
 import { TablePagination } from "~/components/table-pagination";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
@@ -33,6 +34,7 @@ export default function MaterialsPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <PageShell>
+      <NaturalLanguageSearch />
       <MaterialsToolbar query={materials.query} plants={plants} isLoading={isLoading} onClearFilters={clearFilters} />
       <MaterialsTable
         materials={materials.data}

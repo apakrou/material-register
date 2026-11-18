@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch --exclude \"../node_modules/**\" src/index.ts",
+    "dev": "tsx watch --env-file-if-exists=.env --exclude \"../node_modules/**\" src/index.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx src/db/seed.ts",

@@ -1,6 +1,7 @@
 import express, { type ErrorRequestHandler } from "express";
 import { z } from "zod";
 import { listMaterials, listMaterialsQuery, listPlants } from "./materials";
+import { isNlFiltersConfigured, nlFiltersRequest, textToFilters } from "./nl-filters";
 
 export const app = express();
 
@@ -18,6 +19,25 @@ app.get("/api/materials", async (req, res) => {
     return;
   }
   res.json(await listMaterials(parsed.data));
+});
+
+app.post("/api/nl-filters", express.json(), async (req, res) => {
+  if (!isNlFiltersConfigured()) {
+    res.status(503).json({ error: "Natural-language search isn't set up. Add OPENROUTER_API_KEY to server/.env" });
+    return;
+  }
+  const parsed = nlFiltersRequest.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid request", details: z.flattenError(parsed.error).fieldErrors });
+    return;
+  }
+  try {
+    res.json(await textToFilters(parsed.data.text));
+  } catch (err) {
+    // LLM down, rate-limited or gave an unusable answer: log it, give the user a clear message.
+    console.error(err);
+    res.status(502).json({ error: "Couldn't interpret that right now. Try again, or use the filters." });
+  }
 });
 
 // Express 5 passes errors thrown in async handlers here.
