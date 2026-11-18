@@ -9,7 +9,7 @@ import { MATERIAL_STATUSES, MATERIAL_TYPES } from "./db/schema";
 import { listPlants } from "./materials";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const DEFAULT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
+const DEFAULT_MODEL = "google/gemma-4-31b-it:free";
 
 export const nlFiltersRequest = z.object({
   text: z.string().trim().min(1, "Type what you're looking for").max(200),
