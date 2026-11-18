@@ -27,14 +27,17 @@ export function MaterialsToolbar({ query, plants, isLoading, onClearFilters }: P
   }, [urlSearch]);
 
   // Debounce: only update the URL (and so fetch) once the user stops typing.
+  // While another change (a filter, Clear, sort) is loading, wait: the timer would
+  // otherwise fire with the old URL and undo that change. When loading finishes,
+  // this effect runs again and starts a fresh timer with the current URL.
   useEffect(() => {
-    if (search.trim() === urlSearch) return;
+    if (isLoading || search.trim() === urlSearch) return;
     const timer = setTimeout(() => {
       // replace: don't add a history entry for every search term
       updateParams({ q: search.trim() || null }, { replace: true });
     }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [search]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, urlSearch, isLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const hasFilters = Boolean(query.q || query.type || query.status || query.plant);
 

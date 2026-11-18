@@ -48,7 +48,7 @@ server/
   src/*.test.ts             API tests
 web/
   app/routes/materials.tsx  The page: clientLoader (fetching), error state
-  app/components/           Toolbar (search and filters), table, pagination
+  app/components/           Natural-language box, toolbar (search and filters), table, pagination
   app/components/ui/        shadcn/ui components
   app/lib/                  API types and fetch helper, URL-state hook
 ```
@@ -181,6 +181,7 @@ I built this with **Claude Code** as my coding agent, and treated it like a fast
   - React Router's SPA mode only allows `HydrateFallback` on the root route.
   - Two versions of Vite were installed, which broke the plugin types.
   - The debounced search box trimmed a trailing space while I was still typing.
+- A final audit before submitting. I had the agent go through the brief line by line, clone the repo fresh from GitHub, follow the README, and check every requirement in a browser. That caught a race condition: clicking Clear sometimes put the filters back. The search box's 300 ms debounce timer still held the old URL, and when it fired it undid the Clear. The fix was to pause the timer while another change is loading, then restart it with the current URL.
 
 **What I had to correct or steer**
 - **Intermittent 502 errors on my Mac.** The agent's first guess was a keep-alive problem in the Vite proxy. The change it made didn't fix anything. I pasted the dev server logs, which showed the real cause: `tsx watch` was also watching files in `node_modules`. iCloud sync on my Desktop folder kept touching those files, so the API restarted every few seconds, and requests that landed mid-restart failed. We excluded `node_modules` from the watcher and reverted the proxy change, and I moved the project out of the iCloud-synced Desktop. The lesson: read the logs before changing code.
