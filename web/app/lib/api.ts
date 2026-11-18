@@ -49,3 +49,16 @@ export async function getJson<T>(path: string, signal?: AbortSignal): Promise<T>
   }
   return res.json();
 }
+
+export type NlFilters = { q?: string; type?: string; status?: string; plant?: string };
+
+export async function postJson<T>(path: string, data: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(body?.error ?? `Request failed (${res.status})`);
+  return body;
+}
