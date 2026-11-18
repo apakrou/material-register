@@ -11,7 +11,8 @@ const currency = new Intl.NumberFormat("en-AU", { style: "currency", currency: "
 const quantity = new Intl.NumberFormat("en-AU");
 const date = new Intl.DateTimeFormat("en-AU", { dateStyle: "medium" });
 
-const STATUS_STYLES: Record<Material["status"], string> = {
+// Also used by the Status filter, so the filter matches the badges in the table.
+export const STATUS_STYLES: Record<Material["status"], string> = {
   Active: "border-green-200 bg-green-50 text-green-700",
   Obsolete: "border-neutral-200 bg-neutral-100 text-neutral-600",
   "Pending Review": "border-amber-200 bg-amber-50 text-amber-700",

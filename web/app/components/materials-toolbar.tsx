@@ -1,5 +1,6 @@
 import { Loader2, Search, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { STATUS_STYLES } from "~/components/materials-table";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
@@ -69,6 +70,7 @@ export function MaterialsToolbar({ query, plants, isLoading, onClearFilters }: P
         value={query.status}
         options={MATERIAL_STATUSES.map((s) => ({ value: s, label: s }))}
         onChange={(value) => updateParams({ status: value })}
+        activeStyle={query.status && STATUS_STYLES[query.status as keyof typeof STATUS_STYLES]}
       />
       <FilterSelect
         label="Plant"
@@ -99,12 +101,13 @@ type FilterSelectProps = {
   value: string | undefined;
   options: { value: string; label: string }[];
   onChange: (value: string | null) => void;
+  activeStyle?: string; // colours when a value is set (default: blue)
 };
 
-function FilterSelect({ label, value, options, onChange }: FilterSelectProps) {
+function FilterSelect({ label, value, options, onChange, activeStyle = ACTIVE_STYLE }: FilterSelectProps) {
   return (
     <Select value={value ?? ALL} onValueChange={(v) => onChange(v === ALL ? null : v)}>
-      <SelectTrigger aria-label={label} className={cn("bg-card w-44", value && `${ACTIVE_STYLE} font-medium`)}>
+      <SelectTrigger aria-label={label} className={cn("bg-card w-44", value && `${activeStyle} font-medium`)}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
