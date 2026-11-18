@@ -164,6 +164,12 @@ Design choices:
 - **Detail and edit view** for a single material.
 - **Natural-language filters:** use structured outputs (a JSON schema in the request) on models that support it, add a manufacturer filter so "SKF bearings" works, and cache answers for repeated questions.
 - **Front-end tests** for the URL-state logic and the debounce, plus an end-to-end Playwright test.
+- **Security for production:**
+  - authentication and authorisation
+  - rate limiting, especially on `/api/nl-filters`, since every call uses the LLM
+  - HTTPS and security headers
+  - a secrets manager instead of `.env`
+  - a least-privilege database user instead of `postgres`
 - **Production setup:** serve the built SPA and the API from one origin (or configure CORS), add structured logging and a health-check endpoint, and use a separate test database.
 
 ## How I used AI tools
@@ -198,4 +204,12 @@ I built this with **Claude Code** as my coding agent, and treated it like a fast
   - I set up Docker Desktop for the database.
   - I checked the npm audit warnings. They come from Drizzle's development tooling. The suggested `npm audit fix --force` would downgrade `drizzle-kit` and break migrations, so I left it.
   - The shadcn component registry was blocked in the agent's sandbox, so the component source was copied from the shadcn/ui repo instead. `npx shadcn add` works normally on my machine.
+- **Security check.** Before submitting, I had the agent review the app for security issues. It confirmed:
+  - SQL is parameterised, and LIKE wildcards are escaped.
+  - Every input is validated.
+  - The LLM's output is treated as untrusted.
+  - The key is server-side only and has never been committed.
+  - `npm audit --omit=dev` finds no vulnerabilities in what the app runs.
+  
+  It also found two real issues, which I fixed: the database and the API were listening on every network interface, so anyone on the same wifi could reach them, and the database has a default password. Both now listen on `127.0.0.1` only. Auth, rate limiting and a least-privilege database user are on the production list under "What I'd do next".
 - **Keeping it honest.** I had the agent check the indexes with `EXPLAIN ANALYZE`. Rather than claiming they speed everything up, the README says which ones actually matter at 10,000 rows.
