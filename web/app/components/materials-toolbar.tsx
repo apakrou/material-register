@@ -5,8 +5,11 @@ import { Input } from "~/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { MATERIAL_STATUSES, MATERIAL_TYPES, type MaterialsResponse, type Plant } from "~/lib/api";
 import { useUpdateParams } from "~/lib/use-update-params";
+import { cn } from "~/lib/utils";
 
 const SEARCH_DEBOUNCE_MS = 300;
+// Filters that are set get a light blue tint, so it's easy to see what's applied.
+const ACTIVE_STYLE = "border-primary/40 bg-primary/5 text-primary";
 const ALL = "all"; // Radix Select can't use "" as a value, so "all" means "no filter"
 
 type Props = {
@@ -51,7 +54,7 @@ export function MaterialsToolbar({ query, plants, isLoading, onClearFilters }: P
           aria-label="Search materials"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="pl-8"
+          className={cn("bg-card pl-8", urlSearch && ACTIVE_STYLE)}
         />
       </div>
 
@@ -101,7 +104,7 @@ type FilterSelectProps = {
 function FilterSelect({ label, value, options, onChange }: FilterSelectProps) {
   return (
     <Select value={value ?? ALL} onValueChange={(v) => onChange(v === ALL ? null : v)}>
-      <SelectTrigger aria-label={label} className="w-44">
+      <SelectTrigger aria-label={label} className={cn("bg-card w-44", value && `${ACTIVE_STYLE} font-medium`)}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent>

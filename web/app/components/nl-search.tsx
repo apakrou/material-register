@@ -45,17 +45,17 @@ export function NaturalLanguageSearch() {
     <form onSubmit={handleSubmit} className="space-y-1">
       <div className="flex gap-2">
         <div className="relative w-full sm:w-[28rem]">
-          <Sparkles className="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
+          <Sparkles className="text-primary absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
           <Input
             placeholder='Describe what you need, e.g. "obsolete bearings in Brisbane"'
             aria-label="Describe what you're looking for"
             value={text}
             onChange={(e) => setText(e.target.value)}
-            className="pl-8"
+            className="bg-card pl-8"
             maxLength={200}
           />
         </div>
-        <Button type="submit" variant="secondary" disabled={pending || !text.trim()}>
+        <Button type="submit" disabled={pending || !text.trim()}>
           {pending && <Loader2 className="animate-spin" />}
           Apply
         </Button>

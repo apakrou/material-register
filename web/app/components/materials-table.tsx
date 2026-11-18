@@ -28,9 +28,9 @@ type Props = {
 
 export function MaterialsTable({ materials, query, isLoading, onClearFilters }: Props) {
   return (
-    <div className={cn("rounded-md border transition-opacity", isLoading && "opacity-60")}>
+    <div className={cn("bg-card rounded-lg border shadow-sm transition-opacity", isLoading && "opacity-60")}>
       <Table>
-        <TableHeader>
+        <TableHeader className="bg-muted/70">
           <TableRow>
             <SortableHead column="materialNumber" label="Material" query={query} />
             <SortableHead column="description" label="Description" query={query} />
@@ -123,7 +123,7 @@ function SortableHead({ column, label, query, className }: SortableHeadProps) {
 
 export function MaterialsTableSkeleton() {
   return (
-    <div className="space-y-2 rounded-md border p-4">
+    <div className="bg-card space-y-2 rounded-lg border p-4 shadow-sm">
       {Array.from({ length: 10 }, (_, i) => (
         <Skeleton key={i} className="h-8" />
       ))}
