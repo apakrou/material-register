@@ -166,16 +166,29 @@ Design choices:
 
 ## How I used AI tools
 
-I built this with **Claude Code**.
+I built this with **Claude Code** as my coding agent, and treated it like a fast pair programmer. It wrote most of the code. I set the direction, reviewed the output, tested it on my own machine, and pushed back when something was wrong or more complicated than it needed to be.
 
-- **What worked well:** scaffolding the boilerplate (Drizzle schema, Express setup, shadcn components), writing the realistic seed templates, and drafting the tests.
-- **What I had to correct or check myself:**
-  - React Router's SPA mode only allows `HydrateFallback` on the **root** route. The first version put it on the page route, and the dev server failed. I moved it to `root.tsx`.
-  - Two versions of Vite were installed (one pulled in by Vitest, one by the web app), which broke the plugin types. I aligned both on one version and used Vite's built-in tsconfig path handling instead of an extra plugin.
-  - The first version of the search sync trimmed the input text while the user was still typing: typing "ball " lost the trailing space. The fix only overwrites the input when the URL value differs from the trimmed text.
-  - Intermittent 502s on macOS. My first guess (from the AI) was a keep-alive race in the Vite proxy, and that change didn't help. The dev logs showed the real cause: `tsx watch` also watches files inside `node_modules`, and something on the Mac (probably iCloud Desktop sync or Spotlight) kept touching them. That restarted the API every few seconds, and requests that arrived mid-restart failed. The fix was to exclude `../node_modules/**` from the watcher and revert the proxy change. The lesson: read the logs before changing code.
-  - Free-model reality: the first default (Llama 3.3 70B free) had been withdrawn (404), and the next (Gemma 4 31B) was rate-limited by the shared free pool (429). We used OpenRouter's `models` fallback list rather than writing our own retry logic, and added a specific "busy, try again" message. To get rid of the dependency on a shared free pool, the API URL became configurable, so the same code runs a local model through Ollama.
-  - Natural-language filters: the sandbox couldn't reach OpenRouter or Ollama. So the agent tested everything around the LLM call with a mocked reply (prompt contents, parsing, validation, errors, and the UI with a mocked API response). I then checked the real model end to end with my own key.
-  - The shadcn registry wasn't reachable from the sandbox, so the component source was copied from the shadcn/ui repo. `components.json` is set up, so `npx shadcn add <component>` works normally.
-  - Checked that the indexes are justified, with `EXPLAIN ANALYZE`, and kept the README honest about which ones matter at this data size.
-- **Agent context:** [`CLAUDE.md`](./CLAUDE.md) describes the structure, commands and conventions for agents working in this repo.
+**How I worked with it**
+- I started by asking it to read the brief closely and build the simplest design that met every requirement, because I need to be able to explain every line. That ruled out extras like a state library, a separate types package or tRPC for two endpoints.
+- I chose shadcn/ui as the UI library, kept the database, API and front end in one repo with npm workspaces, and wanted setup to be three commands.
+- Larger changes, like the natural-language filters, went on a separate branch. I only merged them into `main` after testing them on my Mac.
+- [`CLAUDE.md`](./CLAUDE.md) gives any agent the project's structure, commands and conventions. It also has step-by-step checklists for adding a filter or a column, which keeps the agent's changes consistent with the rest of the code.
+
+**What worked well**
+- Scaffolding: the Drizzle schema and migrations, the Express setup, the shadcn components and the React Router SPA setup.
+- Realistic seed data. Templates like "Bearing, deep groove ball, 25mm bore" with real-looking part numbers make the search demo meaningful.
+- Writing tests, and testing its own work in a headless browser before handing it to me. That caught three bugs before I ever saw them:
+  - React Router's SPA mode only allows `HydrateFallback` on the root route.
+  - Two versions of Vite were installed, which broke the plugin types.
+  - The debounced search box trimmed a trailing space while I was still typing.
+
+**What I had to correct or steer**
+- **Intermittent 502 errors on my Mac.** The agent's first guess was a keep-alive problem in the Vite proxy. The change it made didn't fix anything. I pasted the dev server logs, which showed the real cause: `tsx watch` was also watching files in `node_modules`. iCloud sync on my Desktop folder kept touching those files, so the API restarted every few seconds, and requests that landed mid-restart failed. We excluded `node_modules` from the watcher and reverted the proxy change, and I moved the project out of the iCloud-synced Desktop. The lesson: read the logs before changing code.
+- **The optional extra.** The agent first chose tests as the one optional extra. I switched it to natural-language filters, because they fit an AI-native role and make a better demo. The tests stayed, as normal quality practice.
+- **Free models in practice.** On my machine, the first default model (Llama 3.3 70B) was no longer free (404), and the next (Gemma 4 31B) was rate-limited by OpenRouter's shared free pool (429). We added OpenRouter's model fallback list and a clear "busy, try again" message. Shared free models still aren't something I'd trust in a live demo, so I asked whether I could run a model locally. Making the API URL configurable means the same code now runs `gemma3:12b` on Ollama on my laptop: no key, no rate limits, and the data never leaves the machine.
+- **Verifying what the sandbox couldn't.** The agent's cloud sandbox couldn't reach OpenRouter or Ollama. So it tested everything around the LLM call against mocked replies: the prompt contents, parsing, validation, errors, and the UI with a mocked response. I tested the real model end to end on my Mac with Ollama. The first request after starting Ollama timed out while the model loaded into memory. Retrying worked, so I warm the model up before demos.
+- **Smaller things.**
+  - I set up Docker Desktop for the database.
+  - I checked the npm audit warnings. They come from Drizzle's development tooling. The suggested `npm audit fix --force` would downgrade `drizzle-kit` and break migrations, so I left it.
+  - The shadcn component registry was blocked in the agent's sandbox, so the component source was copied from the shadcn/ui repo instead. `npx shadcn add` works normally on my machine.
+- **Keeping it honest.** I had the agent check the indexes with `EXPLAIN ANALYZE`. Rather than claiming they speed everything up, the README says which ones actually matter at 10,000 rows.
